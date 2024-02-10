@@ -1,0 +1,60 @@
+# Import necessary libraries
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score
+from joblib import dump, load
+
+# Step 1: Extract and Load Data
+data = pd.read_csv('data.csv')
+
+# Step 2: Data Preprocessing (Transformation)
+X = data.drop('target_column', axis=1)
+y = data['target_column']
+
+# Split data into train and test sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Step 3: Define Preprocessing Steps
+# For numeric features: impute missing values with mean and scale them
+numeric_features = X.select_dtypes(include=['int64', 'float64']).columns
+numeric_transformer = Pipeline(steps=[
+    ('imputer', SimpleImputer(strategy='mean')),
+    ('scaler', StandardScaler())])
+
+# For categorical features: impute missing values with most frequent and one-hot encode them
+categorical_features = X.select_dtypes(include=['object']).columns
+categorical_transformer = Pipeline(steps=[
+    ('imputer', SimpleImputer(strategy='most_frequent')),
+    ('onehot', OneHotEncoder(handle_unknown='ignore'))])
+
+# Combine preprocessing steps
+preprocessor = ColumnTransformer(
+    transformers=[
+        ('num', numeric_transformer, numeric_features),
+        ('cat', categorical_transformer, categorical_features)])
+
+# Step 4: Define Pipeline with Preprocessing and Logistic Regression Model
+pipeline = Pipeline(steps=[
+    ('preprocessor', preprocessor),
+    ('classifier', LogisticRegression())])
+
+# Step 5: Train the Pipeline
+pipeline.fit(X_train, y_train)
+
+# Step 6: Predictions and Evaluation
+y_pred = pipeline.predict(X_test)
+accuracy = accuracy_score(y_test, y_pred)
+print("Accuracy:", accuracy)
+
+# Step 7: Save the Pipeline
+dump(pipeline, 'logistic_regression_pipeline.joblib')
+
+# Step 8: Load the Pipeline (optional)
+loaded_pipeline = load('logistic_regression_pipeline.joblib')
+
+# Now you can use 'loaded_pipeline' to make predictions on new data
