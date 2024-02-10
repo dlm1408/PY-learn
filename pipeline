@@ -57,4 +57,79 @@ dump(pipeline, 'logistic_regression_pipeline.joblib')
 # Step 8: Load the Pipeline (optional)
 loaded_pipeline = load('logistic_regression_pipeline.joblib')
 
+#---------------------
+# Import necessary libraries
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.svm import SVC
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import roc_auc_score
+from joblib import dump, load
+
+# Step 1: Extract and Load Data
+data = pd.read_csv('data.csv')
+
+# Step 2: Data Preprocessing (Transformation)
+X = data.drop('target_column', axis=1)
+y = data['target_column']
+
+# Split data into train and test sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Step 3: Define Preprocessing Steps
+numeric_features = X.select_dtypes(include=['int64', 'float64']).columns
+numeric_transformer = Pipeline(steps=[
+    ('imputer', SimpleImputer(strategy='mean')),
+    ('scaler', StandardScaler())])
+
+categorical_features = X.select_dtypes(include=['object']).columns
+categorical_transformer = Pipeline(steps=[
+    ('imputer', SimpleImputer(strategy='most_frequent')),
+    ('onehot', OneHotEncoder(handle_unknown='ignore'))])
+
+preprocessor = ColumnTransformer(
+    transformers=[
+        ('num', numeric_transformer, numeric_features),
+        ('cat', categorical_transformer, categorical_features)])
+
+# Step 4: Define Pipelines for Multiple Algorithms
+pipelines = {
+    'Logistic Regression': Pipeline(steps=[('preprocessor', preprocessor), ('classifier', LogisticRegression())]),
+    'Random Forest': Pipeline(steps=[('preprocessor', preprocessor), ('classifier', RandomForestClassifier())]),
+    'Gradient Boosting': Pipeline(steps=[('preprocessor', preprocessor), ('classifier', GradientBoostingClassifier())]),
+    'Support Vector Machine': Pipeline(steps=[('preprocessor', preprocessor), ('classifier', SVC(probability=True))]),
+    'Decision Tree': Pipeline(steps=[('preprocessor', preprocessor), ('classifier', DecisionTreeClassifier())])
+}
+
+# Step 5: Train Pipelines and Print AUC Scores
+auc_scores = {}
+for name, pipeline in pipelines.items():
+    pipeline.fit(X_train, y_train)
+    y_pred_proba = pipeline.predict_proba(X_test)[:, 1]  # Probability of positive class
+    auc = roc_auc_score(y_test, y_pred_proba)
+    auc_scores[name] = auc
+    print(f"AUC for {name}: {auc}")
+
+# Step 6: Select Best Algorithm
+best_algorithm = max(auc_scores, key=auc_scores.get)
+print(f"Best Algorithm: {best_algorithm}")
+
+# Step 7: Save the Best Pipeline
+best_pipeline = pipelines[best_algorithm]
+dump(best_pipeline, 'best_classification_pipeline.joblib')
+
+# Now you can use 'best_classification_pipeline' as the final model for making predictions on new data
+
+## In this updated version:
+
+#Step 5 calculates the AUC scores for each algorithm and stores them in a dictionary.
+#Step 6 selects the algorithm with the highest AUC score as the best algorithm.
+#Step 7 saves the pipeline corresponding to the best algorithm as the final model for future use.
+
 # Now you can use 'loaded_pipeline' to make predictions on new data
