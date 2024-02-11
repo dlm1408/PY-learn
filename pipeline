@@ -400,6 +400,127 @@ plt.title('Aggregated SHAP Values across Deciles for Each Feature')
 plt.legend()
 plt.xticks(range(1, 11))
 plt.grid(True)
+
+
+## -------------new code integrate all together ----------------------------
+import pandas as pd
+import numpy as np
+import shap
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.cluster import KMeans
+from sklearn.feature_selection import SelectKBest, f_classif
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import roc_auc_score, calibration_curve
+from joblib import dump, load
+
+# Step 1: Load Raw Data
+data = pd.read_csv('data.csv')  # Assuming 'data.csv' contains raw data
+
+# Step 2: Define Pipeline for Preprocessing
+numeric_features = data.select_dtypes(include=['int64', 'float64']).columns
+categorical_features = data.select_dtypes(include=['object']).columns
+
+numeric_transformer = Pipeline(steps=[
+    ('imputer', SimpleImputer(strategy='median')),
+    ('scaler', StandardScaler())])
+
+categorical_transformer = Pipeline(steps=[
+    ('imputer', SimpleImputer(strategy='most_frequent')),
+    ('onehot', OneHotEncoder(handle_unknown='ignore'))])
+
+preprocessor = ColumnTransformer(
+    transformers=[
+        ('num', numeric_transformer, numeric_features),
+        ('cat', categorical_transformer, categorical_features)])
+
+# Step 3: Define Pipeline for Feature Selection
+clustered_features = []
+for n_clusters in range(2, min(len(numeric_features), 10)):  # Change the range if needed
+    kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+    kmeans.fit(data[numeric_features])
+    data[f'Cluster_{n_clusters}'] = kmeans.labels_
+    clustered_features.extend([f'Cluster_{n_clusters}'])
+
+all_features = list(numeric_features) + list(categorical_features) + clustered_features
+
+feature_selector = Pipeline(steps=[
+    ('preprocessor', preprocessor),
+    ('feature_selection', SelectKBest(f_classif, k=12))])
+
+# Step 4: Define Pipelines for Multiple Algorithms
+algorithms = {
+    'Logistic Regression': LogisticRegression(),
+    'Random Forest': RandomForestClassifier(),
+    'Gradient Boosting': GradientBoostingClassifier(),
+    'SVM': SVC(probability=True),
+    'Decision Tree': DecisionTreeClassifier()
+}
+
+final_model_pipeline = Pipeline(steps=[
+    ('feature_selector', feature_selector),
+    ('classifier', LogisticRegression())  # Default classifier, will be replaced later
+])
+
+# Step 5: Train Pipelines and Select Best Algorithm
+X_train, X_test, y_train, y_test = train_test_split(data.drop('target_column', axis=1), data['target_column'], test_size=0.2, random_state=42)
+
+best_auc = -1
+best_algorithm = None
+
+for name, algorithm in algorithms.items():
+    final_model_pipeline.set_params(classifier=algorithm)
+    final_model_pipeline.fit(X_train, y_train)
+    y_pred_proba = final_model_pipeline.predict_proba(X_test)[:, 1]
+    auc = roc_auc_score(y_test, y_pred_proba)
+    print(f"AUC for {name}: {auc}")
+    if auc > best_auc:
+        best_auc = auc
+        best_algorithm = final_model_pipeline.named_steps['classifier']
+
+print(f"Best Algorithm: {best_algorithm}")
+
+# Step 6: Explain the Model with SHAP in Decile Level
+y_pred_proba_test = final_model_pipeline.predict_proba(X_test)[:, 1]
+deciles = pd.qcut(y_pred_proba_test, q=10, labels=False)
+
+shap_values_deciles = []
+
+for decile in range(10):
+    X_decile = X_test[deciles == decile]
+    if len(X_decile) == 0:
+        shap_values_deciles.append(None)
+        continue
+    explainer = shap.Explainer(best_algorithm, preprocessor.transform(X_train))
+    shap_values = explainer.shap_values(preprocessor.transform(X_decile))
+    shap_values_deciles.append(shap_values)
+
+# Step 7: Plot Calibration Curve for Selected Features
+plt.figure(figsize=(12, 8))
+
+selected_feature_indices = final_model_pipeline.named_steps['feature_selector'].named_steps['feature_selection'].get_support(indices=True)
+selected_features = [all_features[i] for i in selected_feature_indices]
+
+for feature_name in selected_features:
+    X_test_feature = X_test[[feature_name]]
+    X_test_feature_transformed = preprocessor.transform(X_test_feature)
+    y_pred_proba = final_model_pipeline.predict_proba(X_test_feature_transformed)[:, 1]
+    fraction_of_positives, mean_predicted_value = calibration_curve(y_test, y_pred_proba, n_bins=10)
+    plt.plot(mean_predicted_value, fraction_of_positives, marker='o', label=f'{feature_name}')
+
+plt.plot([0, 1], [0, 1], linestyle='--', color='black', label='Perfectly calibrated')
+plt.xlabel('Mean Predicted Probability')
+plt.ylabel('Fraction of Positives')
+plt.title('Calibration Curve for Selected Features')
+plt.legend()
+plt.grid(True)
+plt.show()
+
 plt.show()
 
 
