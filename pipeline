@@ -292,4 +292,114 @@ In this updated version:
 # The best pipeline (algorithm) is selected based on the highest AUC score.
 # The selected best pipeline is then saved for future use.
 
+#------ plot calibrition curve and check the fairness------#
+"""To plot the calibration curve for each selected feature on the test data, we first need to obtain the predicted probabilities from the best pipeline for each feature individually. 
+Then, we can use these probabilities to plot the calibration curves. Here's how you can do it:"""
+import matplotlib.pyplot as plt
+from sklearn.calibration import calibration_curve
+
+# Step 10: Plot Calibration Curve for Each Selected Feature
+plt.figure(figsize=(10, 10))
+
+for feature_idx in selected_features:
+    # Select the feature from the test data
+    X_test_feature = X_test.iloc[:, feature_idx:feature_idx+1]
+    
+    # Transform the feature using the preprocessing pipeline
+    X_test_feature_transformed = preprocessor.transform(X_test_feature)
+    
+    # Predict probabilities using the best pipeline
+    y_pred_proba = best_pipeline.predict_proba(X_test_feature_transformed)[:, 1]
+    
+    # Calculate calibration curve
+    fraction_of_positives, mean_predicted_value = calibration_curve(y_test, y_pred_proba, n_bins=10)
+    
+    # Plot calibration curve
+    plt.plot(mean_predicted_value, fraction_of_positives, marker='o', label=f'Feature {feature_idx}')
+
+plt.plot([0, 1], [0, 1], linestyle='--', color='black', label='Perfectly calibrated')
+plt.xlabel('Mean Predicted Probability')
+plt.ylabel('Fraction of Positives')
+plt.title('Calibration Curve for Selected Features')
+plt.legend()
+plt.show()
+"""
+We iterate over each selected feature.
+For each feature, we select it from the test data.
+We transform the selected feature using the preprocessing pipeline.
+We predict probabilities using the best pipeline.
+We calculate the calibration curve using calibration_curve.
+We plot the calibration curve for each feature.
+We also plot a dashed line representing a perfectly calibrated model.
+"""
+
+
+"""--------------------shap explain the model ---------------------------------
+To explain the model using SHAP in decile level, we can follow these steps:
+
+Predict probabilities for the test data using the best pipeline.
+Divide the test data into deciles based on predicted probabilities.
+Calculate SHAP values for each decile.
+Aggregate SHAP values for each feature within each decile.
+Visualize the aggregated SHAP values for each feature across deciles.
+In this code:
+
+We use SHAP to calculate the SHAP values for each feature in each decile.
+We aggregate SHAP values across samples within each decile.
+We visualize the aggregated SHAP values across deciles for each feature.
+
+-----------------------------comment end----------------------------------"""
+import numpy as np
+import shap
+
+# Step 10: Predict Probabilities for the Test Data
+y_pred_proba_test = best_pipeline.predict_proba(X_test_transformed)[:, 1]
+
+# Step 11: Divide the Test Data into Deciles
+deciles = pd.qcut(y_pred_proba_test, q=10, labels=False)
+
+# Step 12: Calculate SHAP Values for each Decile
+shap_values_deciles = []
+
+for decile in range(10):
+    # Select data for the current decile
+    X_decile = X_test_transformed[deciles == decile]
+    if len(X_decile) == 0:
+        shap_values_deciles.append(None)
+        continue
+    
+    # Calculate SHAP values
+    explainer = shap.Explainer(best_pipeline.named_steps['classifier'], X_train_transformed)
+    shap_values = explainer.shap_values(X_decile)
+    shap_values_deciles.append(shap_values)
+
+# Step 13: Aggregate SHAP Values for Each Feature within Each Decile
+shap_values_deciles_aggregated = []
+
+for decile in range(10):
+    if shap_values_deciles[decile] is None:
+        shap_values_deciles_aggregated.append(None)
+        continue
+    
+    # Aggregate SHAP values for each feature within the decile
+    shap_values_deciles_aggregated.append(np.mean(np.abs(shap_values_deciles[decile]), axis=0))
+
+# Step 14: Visualize the Aggregated SHAP Values for Each Feature across Deciles
+plt.figure(figsize=(12, 8))
+
+for feature_idx, feature_name in enumerate(X.columns):
+    shap_values_feature = [shap_values_deciles_aggregated[decile][feature_idx] 
+                           if shap_values_deciles_aggregated[decile] is not None else None
+                           for decile in range(10)]
+    
+    plt.plot(range(1, 11), shap_values_feature, marker='o', label=f'Feature {feature_name}')
+
+plt.xlabel('Decile')
+plt.ylabel('Mean Absolute SHAP Value')
+plt.title('Aggregated SHAP Values across Deciles for Each Feature')
+plt.legend()
+plt.xticks(range(1, 11))
+plt.grid(True)
+plt.show()
+
 
