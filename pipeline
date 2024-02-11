@@ -133,3 +133,163 @@ dump(best_pipeline, 'best_classification_pipeline.joblib')
 #Step 7 saves the pipeline corresponding to the best algorithm as the final model for future use.
 
 # Now you can use 'loaded_pipeline' to make predictions on new data
+# --------------------------------------------#
+## To print the original feature numbers, clustering results, and the best features selected by the feature selection methods, you can modify the code as follows:
+# Step 3: Feature Clustering
+kmeans = KMeans(n_clusters=5, random_state=42)
+X_clustered = kmeans.fit_transform(X)
+
+# Print original feature numbers
+print("Original Feature Numbers:", len(X.columns))
+
+# Print clustering result
+print("Clustering Result:", kmeans.labels_)
+
+# Step 4: Define Preprocessing Steps
+# Include clustered features along with original features
+clustered_features = [f'Cluster_{i}' for i in range(X_clustered.shape[1])]
+numeric_features_with_cluster = list(numeric_features) + clustered_features
+
+numeric_transformer = Pipeline(steps=[
+    ('imputer', SimpleImputer(strategy='mean')),
+    ('scaler', StandardScaler())])
+
+preprocessor = ColumnTransformer(
+    transformers=[
+        ('num', numeric_transformer, numeric_features_with_cluster),
+        ('cat', categorical_transformer, categorical_features)])
+
+# Step 5: Define Pipelines for Multiple Algorithms with Feature Selection
+pipelines = {
+    'Logistic Regression with SelectKBest': Pipeline(steps=[
+        ('preprocessor', preprocessor),
+        ('feature_selection', SelectKBest(f_classif, k=15)),
+        ('classifier', LogisticRegression())]),
+
+    'Random Forest with RFE': Pipeline(steps=[
+        ('preprocessor', preprocessor),
+        ('feature_selection', RFE(estimator=RandomForestClassifier(), n_features_to_select=15)),
+        ('classifier', RandomForestClassifier())])
+}
+
+# Step 6: Train Pipelines and Print AUC Scores
+auc_scores = {}
+for name, pipeline in pipelines.items():
+    pipeline.fit(X_train, y_train)
+    X_test_transformed = preprocessor.transform(X_test)
+    y_pred_proba = pipeline.predict_proba(X_test_transformed)[:, 1]  # Probability of positive class
+    auc = roc_auc_score(y_test, y_pred_proba)
+    auc_scores[name] = auc
+    print(f"AUC for {name}: {auc}")
+
+# Step 7: Select Best Pipeline
+best_algorithm = max(auc_scores, key=auc_scores.get)
+best_pipeline = pipelines[best_algorithm]
+print(f"Best Algorithm: {best_algorithm}")
+
+# Step 8: Get Selected Features from the Best Pipeline
+selected_features = best_pipeline.named_steps['feature_selection'].get_support(indices=True)
+print("Best Features Selected:", selected_features)
+
+# Step 9: Save the Best Pipeline
+dump(best_pipeline, 'best_classification_pipeline_with_feature_selection_and_clustering.joblib')
+
+# Now you can use 'best_classification_pipeline_with_feature_selection_and_clustering' as the final model for making predictions on new data
+###----------------------------------------------##
+# We print the original number of features before clustering.
+# We print the clustering result.
+# When defining preprocessing steps in Step 4, we include clustered features along with the original features.
+# After training the pipelines, we extract the selected features from the best pipeline using get_support(indices=True) and print them.
+# The best pipeline is then saved for future use.
+
+###----------------------------------------------##
+
+# Import necessary libraries
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.svm import SVC
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.feature_selection import SelectKBest, f_classif, RFE
+from sklearn.cluster import KMeans
+from sklearn.metrics import roc_auc_score
+from joblib import dump, load
+
+# Step 1: Extract and Load Data
+data = pd.read_csv('data.csv')
+
+# Step 2: Data Preprocessing (Transformation)
+X = data.drop('target_column', axis=1)
+y = data['target_column']
+
+# Split data into train and test sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Step 3: Feature Clustering
+kmeans = KMeans(n_clusters=5, random_state=42)
+X_clustered = kmeans.fit_transform(X)
+
+# Step 4: Define Preprocessing Steps
+numeric_features = X.select_dtypes(include=['int64', 'float64']).columns
+numeric_transformer = Pipeline(steps=[
+    ('imputer', SimpleImputer(strategy='mean')),
+    ('scaler', StandardScaler())])
+
+categorical_features = X.select_dtypes(include=['object']).columns
+categorical_transformer = Pipeline(steps=[
+    ('imputer', SimpleImputer(strategy='most_frequent')),
+    ('onehot', OneHotEncoder(handle_unknown='ignore'))])
+
+preprocessor = ColumnTransformer(
+    transformers=[
+        ('num', numeric_transformer, numeric_features),
+        ('cat', categorical_transformer, categorical_features)])
+
+# Step 5: Define Pipelines for Multiple Algorithms with Feature Selection
+pipelines = {
+    'Logistic Regression with SelectKBest': Pipeline(steps=[
+        ('preprocessor', preprocessor),
+        ('feature_selection', SelectKBest(f_classif, k=15)),
+        ('classifier', LogisticRegression())]),
+
+    'Random Forest with RFE': Pipeline(steps=[
+        ('preprocessor', preprocessor),
+        ('feature_selection', RFE(estimator=RandomForestClassifier(), n_features_to_select=15)),
+        ('classifier', RandomForestClassifier())])
+}
+
+# Step 6: Train Pipelines and Print AUC Scores
+auc_scores = {}
+for name, pipeline in pipelines.items():
+    pipeline.fit(X_train, y_train)
+    X_test_transformed = preprocessor.transform(X_test)
+    y_pred_proba = pipeline.predict_proba(X_test_transformed)[:, 1]  # Probability of positive class
+    auc = roc_auc_score(y_test, y_pred_proba)
+    auc_scores[name] = auc
+    print(f"AUC for {name}: {auc}")
+
+# Step 7: Select Best Pipeline
+best_algorithm = max(auc_scores, key=auc_scores.get)
+best_pipeline = pipelines[best_algorithm]
+print(f"Best Algorithm: {best_algorithm}")
+
+# Step 8: Save the Best Pipeline
+dump(best_pipeline, 'best_classification_pipeline_with_feature_selection_and_clustering.joblib')
+
+# Now you can use 'best_classification_pipeline_with_feature_selection_and_clustering' as the final model for making predictions on new data
+
+##-------------------------------##
+In this updated version:
+
+# Step 3 involves performing feature clustering using KMeans clustering with 5 clusters.
+# Step 5 defines pipelines with feature selection after preprocessing. The preprocessing step includes feature clustering.
+# The AUC scores for each pipeline are calculated and stored in a dictionary.
+# The best pipeline (algorithm) is selected based on the highest AUC score.
+# The selected best pipeline is then saved for future use.
+
+
